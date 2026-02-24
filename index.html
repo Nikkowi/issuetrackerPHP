@@ -812,8 +812,8 @@ select.form-control option { background: #ffffff; color: #333333; }
   </div>
 
   <div class="sidebar-footer">
-    API: <span style="color:#cc0000">localhost:5000</span>
-  </div>
+  API: <span style="color:var(--text-dim)">localhost/issuetracker</span>
+</div>
 </nav>
 
 <!-- ===== MAIN ===== -->
@@ -1155,80 +1155,7 @@ select.form-control option { background: #ffffff; color: #333333; }
 
 // CONFIG
 
-const API = 'http://localhost:8080/issuetracker/api';
-
-async function apiFetch(path, options = {}) {
-    const url = resolveUrl(path, options);
-    const defaultOptions = {
-        headers: { 'Content-Type': 'application/json' },
-        ...options
-    };
-    if (options.body && typeof options.body === 'string') {
-        defaultOptions.headers = { 'Content-Type': 'application/json' };
-    }
-    const res = await fetch(url, defaultOptions);
-    return res.json();
-}
-
-function resolveUrl(path, options = {}) {
-    const method = options.method || 'GET';
-
-    // Dashboard stats
-    if (path === '/issues/dashboard/stats') return `${API}/get_dashboard_stats.php`;
-
-    // Users
-    if (path === '/users') return `${API}/get_users.php`;
-
-    // Issues
-    if (path === '/issues' && method === 'GET') return `${API}/get_issues.php`;
-    if (path === '/issues' && method === 'POST') return `${API}/create_issue.php`;
-
-    // Single issue
-    const issueMatch = path.match(/^\/issues\/(\d+)$/);
-    if (issueMatch) {
-        const id = issueMatch[1];
-        if (method === 'GET') return `${API}/get_issue.php?id=${id}`;
-        if (method === 'PUT') return `${API}/update_issue.php?id=${id}`;
-        if (method === 'DELETE') return `${API}/delete_issue.php?id=${id}`;
-    }
-
-    // Comments
-    const commentsMatch = path.match(/^\/issues\/(\d+)\/comments$/);
-    if (commentsMatch) {
-        const id = commentsMatch[1];
-        if (method === 'GET') return `${API}/get_comments.php?issue_id=${id}`;
-        if (method === 'POST') return `${API}/create_comment.php`;
-    }
-
-    // Attachments
-    const attachmentsMatch = path.match(/^\/issues\/(\d+)\/attachments$/);
-    if (attachmentsMatch) {
-        const id = attachmentsMatch[1];
-        if (method === 'GET') return `${API}/get_attachments.php?issue_id=${id}`;
-        if (method === 'POST') return `${API}/upload_attachment.php`;
-    }
-
-    const attachmentMatch = path.match(/^\/issues\/(\d+)\/attachments\/(\d+)$/);
-    if (attachmentMatch) {
-        const attId = attachmentMatch[2];
-        if (method === 'DELETE') return `${API}/delete_attachment.php?id=${attId}`;
-    }
-
-    const downloadMatch = path.match(/^\/issues\/(\d+)\/attachments\/(\d+)\/download$/);
-    if (downloadMatch) {
-        const attId = downloadMatch[2];
-        return `${API}/download_attachment.php?id=${attId}`;
-    }
-
-    // Reports
-    if (path === '/reports' && method === 'GET') return `${API}/get_reports.php`;
-    if (path === '/reports' && method === 'POST') return `${API}/create_report.php`;
-
-    // CSV Import
-    if (path.includes('/import/csv')) return `${API}/import_csv.php`;
-
-    return `${API}${path}`;
-}
+const API = 'http://localhost/issuetracker/api';
 
 
 // STATE
@@ -1304,15 +1231,20 @@ function openNewIssueModal() {
 
 // API HELPERS
 
+// 2. Update the function to handle the slash correctly
 async function apiFetch(url, opts = {}) {
   try {
-    const res = await fetch(API + url, {
+    // We add the slash here manually to ensure it's always 'api/filename.php'
+    const res = await fetch(`${API}${url}`, {
       headers: { 'Content-Type': 'application/json' },
       ...opts
     });
+    
+    if (!res.ok) throw new Error(`Server error: ${res.status}`);
     return await res.json();
   } catch (e) {
-    toast('Cannot connect to API. Is the backend running on port 5000?', 'error');
+    // UPDATED: Removed the "port 5000" message since we are on XAMPP now
+    toast('Connection error. Check if XAMPP Apache is running.', 'error');
     throw e;
   }
 }
@@ -1322,7 +1254,7 @@ async function apiFetch(url, opts = {}) {
 
 async function loadUsers() {
   try {
-    const res = await apiFetch('/users');
+    const res = await apiFetch('/get_users.php')
     allUsers = res.data || [];
     populateUserSelects();
   } catch { allUsers = []; }
@@ -1350,7 +1282,7 @@ function populateUserSelects() {
 
 async function loadDashboard() {
   try {
-    const res = await apiFetch('/issues/dashboard/stats');
+    const res = await apiFetch('/get_stats.php');
     const d = res.data;
     if (!d) return;
 
@@ -1428,11 +1360,13 @@ function renderDashboardChart(data) {
 
 async function loadRecentIssues() {
   try {
-    const res = await apiFetch('/issues?state=&priority=');
+    const res = await apiFetch('/get_issues.php?state=&priority=');
     const issues = (res.data || []).slice(0, 8);
     const tbody = document.getElementById('recent-issues-body');
     tbody.innerHTML = issues.length ? issues.map(issueRow).join('') : emptyRow(8, 'No issues found.');
-  } catch { }
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 
@@ -1448,7 +1382,7 @@ async function loadIssues() {
   if (search)   params.set('search', search);
 
   try {
-    const res = await apiFetch(`/issues?${params}`);
+    const res = await apiFetch(`/get_issues.php${params}`);
     const issues = res.data || [];
     const tbody = document.getElementById('issues-body');
     tbody.innerHTML = issues.length
@@ -1459,7 +1393,7 @@ async function loadIssues() {
 
 function issueRow(i, showActions = false) {
   return `
-  <tr onclick="viewIssue(${i.id})">
+  <tr onclick="viewIssue(${i.id})" style="cursor:pointer" class="hover-row"> 
     <td class="td-id">#${i.id}</td>
     <td style="white-space:nowrap;font-size:12px;">${i.dashboard || '—'}</td>
     ${showActions ? `<td style="font-size:12px;">${i.module || '—'}</td>` : ''}
@@ -1468,13 +1402,14 @@ function issueRow(i, showActions = false) {
     <td>${priBadge(i.priority)}</td>
     <td style="font-size:12px;">${i.issuedByName || '—'}</td>
     <td class="td-date">${fmtDate(i.dateIdentified)}</td>
-    ${showActions ? `<td onclick="event.stopPropagation()">
+    ${showActions ? `<td>
       <div style="display:flex;gap:4px;">
-        <button class="btn btn-ghost btn-xs" onclick="viewIssue(${i.id})">View</button>
+        <button class="btn btn-ghost btn-xs">View</button>
       </div>
     </td>` : '<td></td>'}
   </tr>`;
 }
+
 
 
 // ISSUE DETAIL
@@ -1482,14 +1417,16 @@ function issueRow(i, showActions = false) {
 async function viewIssue(id) {
   currentIssueId = id;
   openModal('issue-detail-modal');
-  document.getElementById('issue-detail-body').innerHTML = `<div class="empty-state"><div class="loader"></div></div>`;
+  // Clear the old content and show the loader
+  document.getElementById('issue-detail-body').innerHTML = '<div class="loader"></div>';
 
   try {
     const [iRes, cRes, aRes] = await Promise.all([
-      apiFetch(`/issues/${id}`),
-      apiFetch(`/issues/${id}/comments`),
-      apiFetch(`/issues/${id}/attachments`)
+      apiFetch(`/get_issue_detail.php?id=${id}`), // Ensure the slash is there!
+      apiFetch(`/comments.php?issueId=${id}`),
+      apiFetch(`/attachments.php?issueId=${id}`)
     ]);
+
     const issue       = iRes.data;
     const comments    = cRes.data || [];
     const attachments = aRes.data || [];
@@ -1541,7 +1478,7 @@ async function viewIssue(id) {
               <span class="attachment-icon">${getFileIcon(a.fileType)}</span>
               <span class="attachment-name">${escHtml(a.originalName)}</span>
               <span class="attachment-size">${formatSize(a.fileSize)}</span>
-              <a class="attachment-download" href="${API}/issues/${id}/attachments/${a.id}/download" target="_blank">⬇ Download</a>
+              <a class="attachment-download" href="${API}/attachments.php?issueId=${id}&attachmentId=${a.id}&action=download" target="_blank">⬇ Download</a>
               <button class="attachment-delete" onclick="deleteAttachment(${a.id}, ${id})">✕</button>
             </div>`).join('')
           : `<div style="color:#aaa;font-size:12px;">No attachments yet.</div>`}
@@ -1567,12 +1504,21 @@ async function addComment() {
   const text   = document.getElementById('comment-text').value.trim();
   if (!text) return;
 
-  await apiFetch(`/issues/${currentIssueId}/comments`, {
-    method: 'POST',
-    body: JSON.stringify({ userId, commentText: text })
-  });
-  toast('Comment added!', 'success');
-  viewIssue(currentIssueId);
+  try {
+    await apiFetch(`/comments.php`, { 
+      method: 'POST', 
+      body: JSON.stringify({
+        issueId: currentIssueId,
+        userId: userId,
+        commentText: text
+      }) 
+    });
+    
+    toast('Comment added!', 'success');
+    viewIssue(currentIssueId); // Refresh the modal to show the new comment
+  } catch (err) {
+    toast('Failed to add comment', 'error');
+  }
 }
 
 
@@ -1594,7 +1540,7 @@ async function saveEdit() {
   const dto = { state, priority };
   if (assignedTo) dto.assignedTo = parseInt(assignedTo);
 
-  await apiFetch(`/issues/${currentIssueId}`, { method: 'PUT', body: JSON.stringify(dto) });
+  await apiFetch(`/update_issue.php/${currentIssueId}`, { method: 'PUT', body: JSON.stringify(dto) });
   closeModal('edit-issue-modal');
   toast('Issue updated!', 'success');
   viewIssue(currentIssueId);
@@ -1607,7 +1553,7 @@ async function saveEdit() {
 
 async function deleteIssue(id) {
   if (!confirm('Delete this issue? This cannot be undone.')) return;
-  await apiFetch(`/issues/${id}`, { method: 'DELETE' });
+  await apiFetch(`/delete_issue.php/${id}`, { method: 'DELETE' });
   closeModal('issue-detail-modal');
   toast('Issue deleted.', 'info');
   loadDashboard();
@@ -1635,7 +1581,7 @@ async function submitNewIssue(e) {
   };
 
   try {
-    await apiFetch('/issues', { method: 'POST', body: JSON.stringify(dto) });
+    await apiFetch('/create_issue.php', { method: 'POST', body: JSON.stringify(dto) });
     toast('Issue created successfully!', 'success');
     document.getElementById('new-issue-form').reset();
     setTodayDate();
@@ -1725,7 +1671,7 @@ async function generateReport() {
   };
 
   try {
-    const res = await apiFetch('/reports/generate', { method: 'POST', body: JSON.stringify(dto) });
+  const res = await apiFetch('/generate_report.php', { method: 'POST', body: JSON.stringify(dto) });
     const r   = res.data;
     currentReportId = r.id;
 
@@ -1752,7 +1698,7 @@ async function generateReport() {
 
 async function loadReportHistory() {
   try {
-    const res  = await apiFetch('/reports');
+    const res  = await apiFetch('/get_reports.php');
     const list = res.data || [];
     const container = document.getElementById('report-history');
 
@@ -1771,7 +1717,7 @@ async function loadReportHistory() {
 }
 
 function downloadReportExcel(id) {
-  window.open(`${API}/reports/${id}/export`, '_blank');
+  window.open(`${API}/download_report.php?id=${id}`, '_blank');
 }
 
 function exportIssues() {
@@ -1780,8 +1726,11 @@ function exportIssues() {
   const params   = new URLSearchParams();
   if (state)    params.set('state', state);
   if (priority) params.set('priority', priority);
-  window.open(`${API}/reports/export-issues?${params}`, '_blank');
+  
+  // Point to a PHP script instead of /reports/export-issues
+  window.open(`${API}/export_issues_excel.php?${params}`, '_blank');
 }
+
 
 // ===========================
 // MODAL HELPERS
@@ -1867,7 +1816,7 @@ async function uploadAttachment(issueId) {
   formData.append('file', file);
 
   try {
-    const res = await fetch(`${API}/issues/${issueId}/attachments`, {
+    const res = await fetch(`${API}/attachments.php?issueId=${issueId}`, {
       method: 'POST',
       body: formData
     });
@@ -1885,7 +1834,7 @@ async function uploadAttachment(issueId) {
 }
 
 async function refreshAttachments(issueId) {
-  const aRes = await apiFetch(`/issues/${issueId}/attachments`);
+  const aRes = await apiFetch(`/attachments.php?issueId=${issueId}`);
   const attachments = aRes.data || [];
 
   const list = document.getElementById('attachment-list');
@@ -1896,7 +1845,7 @@ async function refreshAttachments(issueId) {
       <span class="attachment-icon">${getFileIcon(a.fileType)}</span>
       <span class="attachment-name">${escHtml(a.originalName)}</span>
       <span class="attachment-size">${formatSize(a.fileSize)}</span>
-      <a class="attachment-download" href="${API}/issues/${issueId}/attachments/${a.id}/download" target="_blank">⬇ Download</a>
+      <a class="attachment-download" href="${API}/download_attachment.php?id=${a.id}" target="_blank">⬇ Download</a>
       <button class="attachment-delete" onclick="deleteAttachment(${a.id}, ${issueId})">✕</button>
     </div>`).join('')
   : `<div style="color:#aaa;font-size:12px;">No attachments yet.</div>`;
@@ -1916,7 +1865,7 @@ async function refreshAttachments(issueId) {
 async function deleteAttachment(attachmentId, issueId) {
   if (!confirm('Remove this attachment?')) return;
   try {
-    const res = await fetch(`${API}/issues/${issueId}/attachments/${attachmentId}`, { method: 'DELETE' });
+    const res = await fetch(`${API}/delete_attachment.php?issueId=${issueId}&attachmentId=${attachmentId}`, { method: 'DELETE' });
     const data = await res.json();
     if (data.success) {
       toast('Attachment removed.', 'success');
